@@ -1,0 +1,44 @@
+library(shiny)
+library(reticulate)
+
+# Carregar o modelo treinado no Python
+py_run_string("from joblib import load")
+rf_tuned <- py$load("rf_tuned.joblib")
+
+# Mapeamentos para conversão no servidor
+hair_color_map <- 1:11
+names(hair_color_map) <- c("Castanho-aloirado", "Castanho-aloirado, Cinza", "Castanho-aloirado, Branco", 
+                           "Preto", "Loiro","Loiro", "Marrom", "Marrom, Cinza", "Cinza", "Nenhum", "Branco")
+
+skin_color_map <- 1:30
+names(skin_color_map) <- c("Azul", "Azul, Cinza", "Marrom", "Marrom Sardento", "Marrom, Branco",
+                           "Escuro", "Claro", "Claro, Verde, Amarelo", "Dourado", "Verde",
+                           "Verde-Tan, Marrom", "Verde, Cinza", "Cinza", "Cinza, Azul",
+                           "Cinza, Verde, Amarelo", "Cinza, Vermelho", "Claro", "Metálico",
+                           "Verde Mosqueado", "Laranja", "Pálido", "Vermelho", "Vermelho, Azul, Branco",
+                           "Prateado, Vermelho", "Bronzeado", "Desconhecido", "Branco", "Branco, Azul",
+                           "Branco, Vermelho", "Amarelo")
+
+# Interface do Usuário
+ui <- fluidPage(
+  titlePanel(h1(strong("Human Or Not Human"), align = "center")),
+  hr(), # linha horizontal
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("hair_color", "Cor do Cabelo", choices = names(hair_color_map)),
+      selectInput("skin_color", "Cor da Pele", choices = names(skin_color_map)),
+      sliderInput("imc", "IMC", min = 10, max = 40, value = 20),
+      actionButton("goButton", "Classificar")
+    ),
+    mainPanel(
+      div(
+        textOutput("prediction"), 
+        style = "font-style: italic; font-size: 24px; text-align: center;"
+      ),
+      div(
+        imageOutput("image_output"), 
+        style = "text-align: center;"
+      )
+    )
+  )
+)

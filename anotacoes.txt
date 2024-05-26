@@ -1,0 +1,23 @@
+Curso shiny: https://programando-em-shiny.curso-r.com/
+
+Ciência de dados com R: https://livro.curso-r.com/
+
+Zen o R, organização de análise de dados em R: https://curso-r.github.io/zen-do-r/
+
+
+Shiny - Normalmente separamos os arquivos shiny em ui.R e server.R, esses dois arquivos no mesmo diretório rodamos o app com Run App, mas aqui para fins de educação vamos manter em um .rmd.
+Vamos colocar a diagrama de reatividade na documentação.
+
+
+Fala GPToso, tudo bem? Estou fazendo um projeto de interoperabilidade entre R e Python para ciência de dados. Então, a ideia do projeto é apresentar essa interoperabilidade, tanto pelo crosstalk como utilizando o reticulate. O projeto está dividido em 3 scripts o primeiro é o tratamento da base de dados no R (1-sw_species_tratamento.R), gera a base de dados df.csv, o segundo é um notebook em python para a escolha do modelo e gerar o modelo final (2-sw_species_modelo.ipynb), seu output é o modelo final rf_tuned.joblib, por último voltamos para o R para executar o shiny e criar um painel interativo para ter um resultado de acordo com o output do usuário e o resultado do nosso modelo (3-sw_species_shiny.Rmd), seu output é um painel interativo em shiny.
+O projeto iniciou tentando utilizar a base de dados do dplyr chamado starwars para prever a espécie de acordo com o input de características, como cor do cabelo, pele, entre outras característica, porém temos poucos dados, por fim decidi tentar uma abordagem mais simples e alterei para ser uma previsão para prever se aquelas características são de um alien ou humano.
+Dado o contexto do projeto, o erro aparece enquanto executamos o shiny, toda parte de input aparece, como as opções para escolher a cor de cabelo e pele, como o slidebar para selecionar o valor do IMC, porém o output aparece um erro: 
+objeto 'hair_color_map' não encontrado.
+
+Você poderia me ajudar com esse projeto? Tenho alguns pontos de ajuda:
+1. Ideias para o nome do projeto, inicialmente era star wars species..
+2. Verificar os códigos e ver se estão fazendo sentido no contexto do projeto.
+3. Resolver o erro do Shiny.
+4. Documentar o projeto e incluí-lo no portfólio.
+
+Podemos lidar com um de cada vez. Me oriente o que precisa receber para me ajudar.

@@ -1,0 +1,121 @@
+---
+title: "3-honh_app"
+author: "Rafael Dadão"
+date: "2024-05-07"
+runtime: shiny
+---
+# Esse arquivo é responsável por toda a construção do app no shiny
+
+```{r}
+library(shiny)
+library(reticulate)
+
+# Carregar o modelo treinado no Python
+py_run_string("from joblib import load") # Importamos o modelo gerado pelo python
+rf_tuned <- py$load("rf_tuned.joblib") # Utilizamos o reticulate para carregar o modelo
+
+# Mapeamentos para conversão no servidor
+## Precisamos mapear de número de volta para label para ser apresentado na UI
+hair_color_map <- 1:11
+names(hair_color_map) <- c("Castanho-aloirado", "Castanho-aloirado, Cinza", "Castanho-aloirado, Branco", 
+                           "Preto", "Loiro","Loiro", "Marrom", "Marrom, Cinza", "Cinza", "Nenhum", "Branco")
+
+skin_color_map <- 1:30
+names(skin_color_map) <- c("Azul", "Azul, Cinza", "Marrom", "Marrom Sardento", "Marrom, Branco",
+                           "Escuro", "Claro", "Claro, Verde, Amarelo", "Dourado", "Verde",
+                           "Verde-Tan, Marrom", "Verde, Cinza", "Cinza", "Cinza, Azul",
+                           "Cinza, Verde, Amarelo", "Cinza, Vermelho", "Claro", "Metálico",
+                           "Verde Mosqueado", "Laranja", "Pálido", "Vermelho", "Vermelho, Azul, Branco",
+                           "Prateado, Vermelho", "Bronzeado", "Desconhecido", "Branco", "Branco, Azul",
+                           "Branco, Vermelho", "Amarelo")
+
+# Interface do Usuário
+ui <- fluidPage( # A UI é toda a parte de interface com o usuário, inclusive layout
+  titlePanel(h1(strong("Human Or Not Human"), align = "center")),
+  hr(), # linha horizontal
+  sidebarLayout( # Esses slidebarLayout e Panel são layouts prontos para trazer objetos para a UI
+    sidebarPanel(
+      selectInput("hair_color", "Cor do Cabelo", choices = names(hair_color_map)),
+      selectInput("skin_color", "Cor da Pele", choices = names(skin_color_map)),
+      sliderInput("imc", "IMC", min = 10, max = 40, value = 20),
+      actionButton("goButton", "Classificar")
+    ),
+    mainPanel(
+      div( # Utilizamos o div para conseguir aplicar o style no texto
+        textOutput("prediction"), 
+        style = "font-style: italic; font-size: 24px; text-align: center;"
+        ),
+      div(
+        imageOutput("image_output"), 
+        style = "text-align: center;"
+        )
+    )
+  )
+)
+# Finalizado toda a parte visual para o servidor, onde é gerenciado a lógica de back-end
+
+# Servidor
+server <- function(input, output) { # A função é básica, definimos as opções de input na UI e aqui trabalhamos o output
+output$image_output <- renderImage({
+    if (input$goButton == 0) {
+      # Mostra a imagem inicial antes de qualquer classificação
+      list(src = "www/human_or_not_human.png", height = "400", width = "400")
+    } else {
+      # Dependendo da previsão, mostrar a imagem correspondente
+      prediction <- eventReactive(input$goButton, {
+        user_data <- data.frame(
+          hair_color = as.numeric(hair_color_map[input$hair_color]),
+          skin_color = as.numeric(skin_color_map[input$skin_color]),
+          imc = input$imc
+        )
+        
+        names(user_data) <- c("hair_color", "skin_color", "imc")
+        cat("Debug: Dados de entrada preparados\n", file = stderr()) 
+        # Adicionamos algumsa funções debug, para mostrar o que está sendo feito
+        
+        prediction <- rf_tuned$predict_proba(user_data)[,2]
+        cat("Debug: Previsão calculada\n", file = stderr())
+        
+        # Dividimos em output da imagem e do texto
+        # Output imagem
+        if (prediction > 0.7) { # Consideramos humano aquelas probabilidades maior que 70%
+          "Humano"
+        } else {
+          "Alienígena"
+        }
+      })()
+      
+      if (prediction == "Humano") {
+        # Mostra a imagem de humano
+        list(src = "www/humano_img.png", height = "400", width = "400")
+      } else {
+        # Mostra a imagem do alinígena
+        list(src = "www/alienigena_img.png", height = "400", width = "400")
+      }
+    }
+  }, deleteFile = FALSE)
+  
+  output$prediction <- renderText({
+    if (input$goButton > 0) {  # Só mostrar a previsão após o botão ser pressionado
+      eventReactive(input$goButton, {
+        cat("Debug: Classificação iniciada\n", file = stderr())
+        # Output texto
+        if (rf_tuned$predict_proba(data.frame(
+          hair_color = as.numeric(hair_color_map[input$hair_color]),
+          skin_color = as.numeric(skin_color_map[input$skin_color]),
+          imc = input$imc
+        ))[,2] > 0.7) {
+          "Humano"
+        } else {
+          "Alienígena"
+        }
+      })()
+    }
+  })
+}
+
+# Executa a aplicação
+shinyApp(ui = ui, server = server)
+
+```
+

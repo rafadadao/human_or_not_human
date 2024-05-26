@@ -1,0 +1,202 @@
+---
+title: "Human Or Not Human - Tratamento"
+author: "Rafael Dadão"
+date: "2024-05-20"
+output: html_document
+---
+# Carregando bibliotecas
+```{r}
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(reshape2)
+```
+
+# Verificando o dataframe
+```{r}
+head(starwars)
+
+# Selecionando colunas de interesse
+columns <- c("height","mass","hair_color","skin_color","eye_color","species")
+
+# Atribuindo o conjunto de dados selecionados a um objeto
+df <- starwars %>% select(all_of(columns))
+```
+
+# Consultando valores missing
+```{r}
+colSums(is.na(df))
+```
+
+## Vimos que peso tem muito valores NA, vamos tentar explorar melhor o atributo para entendê-lo
+
+### Histograma do peso 
+```{r}
+hist(df$mass, breaks = seq(0, 1400, by = 20)) 
+# vemos que há oulier de peso
+```
+
+### Scatter plot de peso e altura
+```{r}
+plot(df$mass, df$height)
+# quanto maior a altura, maior o peso, para a maioria dos casos
+```
+
+### Vamos identificar o outlier
+```{r}
+subset(df, df$mass > 1000)
+# outlier é um Hutt
+```
+
+### Vamos olhar o conjunto de atributos para os casos com peso NA
+```{r}
+print(subset(df, is.na(df$mass)), n = 28)
+```
+
+### Quantas espécies únicas temos?
+```{r}
+df %>% summarise(n_distinct(species))
+```
+### Vamos fazer uma média de peso por espécie, pois acredito que o peso vá ser muito diferente entre elas
+```{r}
+mean_mass <- df %>% group_by(species) %>% summarise(media_peso = mean(mass, na.rm = TRUE))
+print(mean_mass, n = 38)
+```
+### Vamos preencher os valores ausentes com a média do peso da espécie
+```{r}
+df_miss <- subset(df, is.na(mass))
+
+df_miss <- left_join(df_miss, mean_mass, by = "species") %>% 
+  select(-c('mass')) %>% rename(mass = media_peso)
+
+df_tratado <- rbind(subset(df, !is.na(df$mass)), df_miss)
+```
+
+# Pronto, resolvemos o problema do missing data do peso
+## Vamos tratar a altura da mesma forma
+```{r}
+hist(df$height, breaks = seq(0, 350, by = 25))
+
+mean_height <- df %>% group_by(species) %>% summarise(media_altura = mean(height, na.rm = TRUE))
+print(mean_height, n = 38)
+
+df_miss <- subset(df, is.na(height))
+
+df_miss <- left_join(df_miss, mean_height, by = "species") %>% 
+  select(-c('height')) %>% rename(height = media_altura)
+
+df_tratado <- rbind(subset(df_tratado, !is.na(df_tratado$height)), df_miss)
+```
+## Os NA do hair_color vamos transformar em none
+```{r}
+print(subset(df, is.na(df$hair_color)), n = 5) 
+# nenhuma dessas espécies possui cabelo mesmo
+df_tratado <- df_tratado %>% mutate(hair_color = ifelse(is.na(hair_color), "none", hair_color))
+```
+## Os valores que não conseguimos preencher de peso e os missing da coluna target (species) serão excluídos
+```{r}
+df_tratado <- df_tratado[complete.cases(df_tratado),] 
+# Excluindo linhas com valores missing
+```
+
+# Transformando character em fator
+```{r}
+columns_chr = c('hair_color','skin_color','eye_color','species')
+
+df_tratado <- df_tratado %>% 
+  mutate_at(vars(columns_chr), as.factor)
+```
+
+# Criando variável target identificando se é humano ou alien
+```{r}
+df_tratado$specie_human <- ifelse(df_tratado$species == "Human", 1, 0)
+df_tratado$specie_human <- as.factor(df_tratado$specie_human)
+```
+
+# Excluindo species
+```{r}
+df_tratado <- df_tratado %>% select(-'species')
+
+str(df_tratado)
+```
+
+# Balanceamento de classes
+```{r}
+ggplot(df_tratado, aes(x = factor(specie_human))) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Distribuição das Classes", x = "Classe", y = "Frequência")
+
+table(df_tratado$specie_human)
+# 40 aliens x 30 humanos
+```
+## Temos mais observações de aliens do que humanos na base, porém vou optar por seguir dessa forma.
+## Uma vez que os atributos dos aliens deve variar mais, sendo mais difícies de aprender para retirar 10 observações
+
+# Aplicando feature selection
+```{r}
+fs_rf <- randomForest(specie_human ~ ., df_tratado, importance = TRUE) 
+varImpPlot(fs_rf)
+```
+## Apesar de já termos feito uma primeira seleção de variáveis voltado a negócio
+## E quando dizemos negócio aqui é retirar atributos por interpretação
+## Afinal, a nave espacial do personagem não deve ser algo que conta para identificar a espécie
+## Rodamos também um feature selection para entender quais atributos mais impactam no database
+## Vemos que cor da pele e dos olhos são os atributos com maior impacto
+
+# Correlação
+```{r}
+# Função para aplicar label encoding em uma coluna
+label_encode <- function(column) {
+  # Convertendo os fatores em números inteiros
+  as.integer(factor(column))
+}
+
+# Aplicando label encoding nas colunas categóricas do seu dataframe
+df_encoded <- df_tratado %>%
+  mutate(
+    hair_color = label_encode(hair_color),
+    skin_color = label_encode(skin_color),
+    eye_color = label_encode(eye_color),
+    specie_human = label_encode(specie_human)
+  )
+
+# Calculando a matriz de correlação
+corr_matrix <- cor(df_encoded, use = "complete.obs")
+
+# Transformando a matriz de correlação em um formato longo para o ggplot2
+melted_corr_matrix <- melt(corr_matrix)
+
+# Criando o mapa de calor com rótulos de texto
+ggplot(data = melted_corr_matrix, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  geom_text(aes(label=round(value, 2)), color="black", size=4) +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Correlation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 45, vjust = 1)) +
+  labs(x = '', y = '', title = 'Mapa de Calor da Matriz de Correlação com Valores')
+```
+## Apesar de termos unido todas os atributos em uma única correlação, vemos os seguintes pontos:
+## Há uma correlação positiva entre eye_color e hair_color
+## Como eye_color tem menos importância que hair_color vamos excluí-la
+
+## Uma maneira de reduzir e dar mais peso/poder a peso e altura seria criando uma variável de IMC
+
+# Engenharia de atributos
+```{r}
+# Unir peso e altura em IMC, excluir eye color
+
+df_tratado$imc <- df_tratado$mass / (df_tratado$height/100)^2
+df_tratado <- df_tratado %>% select(-c(eye_color,mass,height))
+```
+
+# Salvando dataframe
+```{r}
+write.csv(df_tratado, file = file.path(getwd(), "df.csv"), row.names = FALSE)
+
+# --- FIM ---
+```
+

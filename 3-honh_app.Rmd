@@ -1,0 +1,143 @@
+---
+title: "3-honh_app"
+author: "Rafael Dadão"
+date: "2024-05-07"
+runtime: shiny
+---
+# Esse arquivo é responsável por toda a construção do app no shiny
+
+```{r}
+library(shiny)
+library(reticulate)
+
+# Carrega o modelo treinado no Python e o scaler
+py_run_string("from joblib import load")
+py_run_string("knn_model = load('knn_model.joblib')")
+py_run_string("scaler = load('scaler.joblib')")
+
+
+# Mapeamentos para conversão no servidor
+## Mapeamentos para exibir as cores traduzidas no UI
+## Utilizamos os mesmos números do labelEncoder do Python
+hair_color_map <- c("Castanho-aloirado" = 2, "Castanho-aloirado, Cinza" = 1, "Castanho-aloirado, Branco" = 0, 
+                    "Preto" = 3, "Loiro" = 4, "Marrom" = 6, "Marrom, Cinza" = 7, "Cinza" = 8, "Nenhum" = 9, 
+                    "Branco" = 10, "Loiro, Cinza" = 5)
+
+skin_color_map <- c("Azul" = 0, "Azul, Cinza" = 1, "Marrom" = 2, "Marrom Sardento" = 3, "Marrom, Branco" = 4, 
+                    "Escuro" = 5, "Claro" = 6, "Claro, Verde, Amarelo" = 7, "Dourado" = 8, "Verde" = 9, 
+                    "Verde-Tan, Marrom" = 11, "Verde, Cinza" = 10, "Cinza" = 12, "Cinza, Azul" = 13, 
+                    "Cinza, Verde, Amarelo" = 14, "Cinza, Vermelho" = 15, "Claro" = 16, "Metálico" = 17, 
+                    "Verde Mosqueado" = 18, "Laranja" = 19, "Pálido" = 20, "Vermelho" = 21, "Vermelho, Azul, Branco" = 22, 
+                    "Prateado, Vermelho" = 23, "Bronzeado" = 24, "Desconhecido" = 25, "Branco" = 26, "Branco, Azul" = 27, 
+                    "Branco, Vermelho" = 28, "Amarelo" = 29)
+
+# Interface do Usuário
+ui <- fluidPage( # A UI é toda a parte de interface com o usuário, inclusive layout
+  titlePanel(h1(strong("Human Or Not Human"), align = "center")),
+  hr(), # linha horizontal
+  sidebarLayout( # Esses slidebarLayout e Panel são layouts prontos para trazer objetos para a UI
+    sidebarPanel(
+      selectInput("hair_color", "Cor do Cabelo", choices = names(hair_color_map)),
+      selectInput("skin_color", "Cor da Pele", choices = names(skin_color_map)),
+      sliderInput("imc", "IMC", min = 10, max = 40, value = 20),
+      actionButton("goButton", "Classificar")
+    ),
+    mainPanel(
+      div( # Utilizamos o div para conseguir aplicar o style no texto
+        textOutput("prediction"), 
+        style = "font-style: italic; font-size: 24px; text-align: center;"
+        ),
+      div(
+        imageOutput("image_output"), 
+        style = "text-align: center;"
+        )
+    )
+  )
+)
+# Finalizado toda a parte visual para o servidor, onde é gerenciado a lógica de back-end
+
+# Servidor
+server <- function(input, output) { # A função é básica, definimos as opções de input na UI e aqui trabalhamos o output
+  output$image_output <- renderImage({
+    if (input$goButton == 0) {
+      # Mostra a imagem inicial antes de qualquer classificação
+      list(src = "www/human_or_not_human.png", height = "400", width = "400")
+    } else {
+      # Dependendo da previsão, mostrar a imagem correspondente
+      prediction <- eventReactive(input$goButton, {
+        user_data <- data.frame(
+          c_hair_color = hair_color_map[input$hair_color],
+          c_skin_color = skin_color_map[input$skin_color],
+          imc = input$imc
+        )
+        
+       # Padronizamos as features usando o StandardScaler do python
+        ## precisamos fazer sempre as mesmas tratativas nos novos dados que fizemos para o modelo
+        # Converte dataframe R para pandas dataframe
+        py$user_data <- r_to_py(user_data)
+        
+        # Padroniza as features usando o StandardScaler do Python
+        py_run_string("scaled_user_data = scaler.transform(user_data)")
+        
+        cat("Debug: Dados de entrada preparados\n", file = stderr()) 
+        # Adicionamos algumas funções debug, para mostrar o que está sendo feito
+        
+        py_run_string("prediction = knn_model.predict_proba(scaled_user_data)[:,1]")
+        prediction <- py$prediction
+        cat("Debug: Previsão calculada\n", file = stderr())
+        
+        # Dividimos em output da imagem e do texto
+        # Output imagem
+        if (prediction > 0.7) { # Consideramos humano aquelas probabilidades maior que 70%
+          "Humano"
+        } else {
+          "Alienígena"
+        }
+      })()
+      
+      if (prediction == "Humano") {
+        # Mostra a imagem de humano
+        list(src = "www/humano_img.png", height = "400", width = "400")
+      } else {
+        # Mostra a imagem do alinígena
+        list(src = "www/alienigena_img.png", height = "400", width = "400")
+      }
+    }
+  }, deleteFile = FALSE)
+  
+  output$prediction <- renderText({
+    if (input$goButton > 0) {  # Só mostrar a previsão após o botão ser pressionado
+      eventReactive(input$goButton, {
+        cat("Debug: Classificação iniciada\n", file = stderr())
+        # Output texto
+        user_data <- data.frame(
+          c_hair_color = hair_color_map[input$hair_color],
+          c_skin_color = skin_color_map[input$skin_color],
+          imc = input$imc
+        )
+        
+       # Padronizamos as features usando o StandardScaler do python
+        ## precisamos fazer sempre as mesmas tratativas nos novos dados que fizemos para o modelo
+        # Converte dataframe R para pandas dataframe
+        py$user_data <- r_to_py(user_data)
+        
+        # Padroniza as features usando o StandardScaler do Python
+        py_run_string("scaled_user_data = scaler.transform(user_data)")
+        
+        py_run_string("prediction = knn_model.predict_proba(scaled_user_data)[:,1]")
+        
+        if (py$prediction > 0.7) {
+          "Humano"
+        } else {
+          "Alienígena"
+        }
+      })()
+    }
+  })
+}
+
+# Executa a aplicação
+shinyApp(ui = ui, server = server)
+
+```
+
