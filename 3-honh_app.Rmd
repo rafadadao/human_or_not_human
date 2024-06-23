@@ -4,9 +4,12 @@ author: "Rafael Dadão"
 date: "2024-05-07"
 runtime: shiny
 ---
-# Esse arquivo é responsável por toda a construção do app no shiny
 
-```{r}
+# App Shiny
+
+### Esse arquivo é responsável por toda a construção do app no shiny
+
+```{r app}
 library(shiny)
 library(reticulate)
 
@@ -140,4 +143,3 @@ server <- function(input, output) { # A função é básica, definimos as opçõ
 shinyApp(ui = ui, server = server)
 
 ```
-

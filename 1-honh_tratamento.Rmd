@@ -3,9 +3,14 @@ title: "Human Or Not Human - Tratamento"
 author: "Rafael Dadão"
 date: "2024-05-20"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
+
 # Carregando bibliotecas
-```{r}
+
+```{r carregando pacotes, message=FALSE}
 library(dplyr)
 library(randomForest)
 library(ggplot2)
@@ -13,7 +18,8 @@ library(reshape2)
 ```
 
 # Verificando o dataframe
-```{r}
+
+```{r carregando dataframe}
 head(starwars)
 
 # Selecionando colunas de interesse
@@ -24,46 +30,58 @@ df <- starwars %>% select(all_of(columns))
 ```
 
 # Consultando valores missing
-```{r}
+
+```{r missing values}
 colSums(is.na(df))
 ```
 
-## Vimos que peso tem muito valores NA, vamos tentar explorar melhor o atributo para entendê-lo
+Vimos que peso tem muito valores NA, vamos tentar explorar melhor o
+atributo para entendê-lo
 
-### Histograma do peso 
-```{r}
+## Histograma do peso
+
+```{r histograma}
 hist(df$mass, breaks = seq(0, 1400, by = 20)) 
 # vemos que há oulier de peso
 ```
 
-### Scatter plot de peso e altura
-```{r}
+## Scatter plot de peso e altura
+
+```{r associação}
 plot(df$mass, df$height)
 # quanto maior a altura, maior o peso, para a maioria dos casos
 ```
 
-### Vamos identificar o outlier
-```{r}
+## Vamos identificar o outlier
+
+```{r explorando outlier}
 subset(df, df$mass > 1000)
 # outlier é um Hutt
 ```
 
-### Vamos olhar o conjunto de atributos para os casos com peso NA
-```{r}
+## Vamos olhar o conjunto de atributos para os casos com peso NA
+
+```{r peso missing}
 print(subset(df, is.na(df$mass)), n = 28)
 ```
 
-### Quantas espécies únicas temos?
-```{r}
+## Quantas espécies únicas temos?
+
+```{r espécies únicas}
 df %>% summarise(n_distinct(species))
 ```
-### Vamos fazer uma média de peso por espécie, pois acredito que o peso vá ser muito diferente entre elas
-```{r}
+
+Vamos fazer uma média de peso por espécie, pois acredito que o peso vá
+ser muito diferente entre elas
+
+```{r média peso por espécie}
 mean_mass <- df %>% group_by(species) %>% summarise(media_peso = mean(mass, na.rm = TRUE))
 print(mean_mass, n = 38)
 ```
-### Vamos preencher os valores ausentes com a média do peso da espécie
-```{r}
+
+Vamos preencher os valores ausentes com a média do peso da espécie
+
+```{r tratamento missing peso}
 df_miss <- subset(df, is.na(mass))
 
 df_miss <- left_join(df_miss, mean_mass, by = "species") %>% 
@@ -72,9 +90,11 @@ df_miss <- left_join(df_miss, mean_mass, by = "species") %>%
 df_tratado <- rbind(subset(df, !is.na(df$mass)), df_miss)
 ```
 
-# Pronto, resolvemos o problema do missing data do peso
+Pronto, resolvemos o problema do missing data do peso
+
 ## Vamos tratar a altura da mesma forma
-```{r}
+
+```{r tratamento missing altura}
 hist(df$height, breaks = seq(0, 350, by = 25))
 
 mean_height <- df %>% group_by(species) %>% summarise(media_altura = mean(height, na.rm = TRUE))
@@ -87,20 +107,25 @@ df_miss <- left_join(df_miss, mean_height, by = "species") %>%
 
 df_tratado <- rbind(subset(df_tratado, !is.na(df_tratado$height)), df_miss)
 ```
+
 ## Os NA do hair_color vamos transformar em none
-```{r}
+
+```{r cabelo none}
 print(subset(df, is.na(df$hair_color)), n = 5) 
 # nenhuma dessas espécies possui cabelo mesmo
 df_tratado <- df_tratado %>% mutate(hair_color = ifelse(is.na(hair_color), "none", hair_color))
 ```
+
 ## Os valores que não conseguimos preencher de peso e os missing da coluna target (species) serão excluídos
-```{r}
+
+```{r excluindo valores}
 df_tratado <- df_tratado[complete.cases(df_tratado),] 
 # Excluindo linhas com valores missing
 ```
 
 # Transformando character em fator
-```{r}
+
+```{r transformação em fator}
 columns_chr = c('hair_color','skin_color','eye_color','species')
 
 df_tratado <- df_tratado %>% 
@@ -108,20 +133,23 @@ df_tratado <- df_tratado %>%
 ```
 
 # Criando variável target identificando se é humano ou alien
-```{r}
+
+```{r target}
 df_tratado$specie_human <- ifelse(df_tratado$species == "Human", 1, 0)
 df_tratado$specie_human <- as.factor(df_tratado$specie_human)
 ```
 
 # Excluindo species
-```{r}
+
+```{r limpando dataframe}
 df_tratado <- df_tratado %>% select(-'species')
 
 str(df_tratado)
 ```
 
 # Balanceamento de classes
-```{r}
+
+```{r verificando as classes}
 ggplot(df_tratado, aes(x = factor(specie_human))) +
   geom_bar() +
   theme_minimal() +
@@ -130,22 +158,28 @@ ggplot(df_tratado, aes(x = factor(specie_human))) +
 table(df_tratado$specie_human)
 # 40 aliens x 30 humanos
 ```
-## Temos mais observações de aliens do que humanos na base, porém vou optar por seguir dessa forma.
-## Uma vez que os atributos dos aliens deve variar mais, sendo mais difícies de aprender para retirar 10 observações
+
+Temos mais observações de aliens do que humanos na base, porém vou optar
+por seguir dessa forma. Uma vez que os atributos dos aliens deve variar
+mais, sendo mais difícies de aprender para retirar 10 observações
 
 # Aplicando feature selection
+
 ```{r}
 fs_rf <- randomForest(specie_human ~ ., df_tratado, importance = TRUE) 
 varImpPlot(fs_rf)
 ```
-## Apesar de já termos feito uma primeira seleção de variáveis voltado a negócio
-## E quando dizemos negócio aqui é retirar atributos por interpretação
-## Afinal, a nave espacial do personagem não deve ser algo que conta para identificar a espécie
-## Rodamos também um feature selection para entender quais atributos mais impactam no database
-## Vemos que cor da pele e dos olhos são os atributos com maior impacto
+
+Apesar de já termos feito uma primeira seleção de variáveis voltado a
+negócio E quando dizemos negócio aqui é retirar atributos por
+interpretação Afinal, a nave espacial do personagem não deve ser algo
+que conta para identificar a espécie Rodamos também um feature selection
+para entender quais atributos mais impactam no database Vemos que cor da
+pele e dos olhos são os atributos com maior impacto
 
 # Correlação
-```{r}
+
+```{r correlação}
 # Função para aplicar label encoding em uma coluna
 label_encode <- function(column) {
   # Convertendo os fatores em números inteiros
@@ -179,14 +213,18 @@ ggplot(data = melted_corr_matrix, aes(x=Var1, y=Var2, fill=value)) +
         axis.text.y = element_text(angle = 45, vjust = 1)) +
   labs(x = '', y = '', title = 'Mapa de Calor da Matriz de Correlação com Valores')
 ```
-## Apesar de termos unido todas os atributos em uma única correlação, vemos os seguintes pontos:
-## Há uma correlação positiva entre eye_color e hair_color
-## Como eye_color tem menos importância que hair_color vamos excluí-la
 
-## Uma maneira de reduzir e dar mais peso/poder a peso e altura seria criando uma variável de IMC
+Apesar de termos unido todas os atributos em uma única correlação, vemos
+os seguintes pontos: Há uma correlação positiva entre eye_color e
+hair_color Como eye_color tem menos importância que hair_color vamos
+excluí-la
+
+Uma maneira de reduzir e dar mais peso/poder a peso e altura seria
+criando uma variável de IMC
 
 # Engenharia de atributos
-```{r}
+
+```{r imc}
 # Unir peso e altura em IMC, excluir eye color
 
 df_tratado$imc <- df_tratado$mass / (df_tratado$height/100)^2
@@ -194,9 +232,9 @@ df_tratado <- df_tratado %>% select(-c(eye_color,mass,height))
 ```
 
 # Salvando dataframe
-```{r}
+
+```{r salvando o dataframe}
 write.csv(df_tratado, file = file.path(getwd(), "df.csv"), row.names = FALSE)
 
 # --- FIM ---
 ```
-
